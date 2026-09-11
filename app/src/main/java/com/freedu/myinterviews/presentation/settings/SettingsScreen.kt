@@ -79,8 +79,19 @@ class SettingsViewModel @Inject constructor(
     suspend fun snapshot(profileId: String): Pair<List<Company>, List<JobApplication>> =
         combine(repo.observeCompanies(), repo.observeApplications(profileId)) { c, a -> c to a }.first()
 
-    suspend fun snapshotAll(profileId: String) = kotlinx.coroutines.flow.combine(
-        repo.observeCompanies(),
+    /** Push all upcoming rounds to the device calendar. Returns synced count. */
+    suspend fun syncCalendarNow(ctx: android.content.Context): Int {
+        val now = System.currentTimeMillis()
+        val rounds = repo.observeAllRounds().first()
+            .filter { it.status.name == "UPCOMING" && it.scheduledAt >= now }
+        var n = 0
+        rounds.forEach {
+            if (com.freedu.myinterviews.util.CalendarSync.upsertEvent(ctx, it) != null) n++
+        }
+        return n
+    }
+
+    suspend fun snapshotAll(profileId: String) = kotlinx.coroutines.flow.combine(        repo.observeCompanies(),
         repo.observeApplications(profileId),
         repo.observeAllRounds(),
         repo.observeOffers()
@@ -162,6 +173,70 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
                     )
                     "Portfolio PDF exported (${snap.apps.size} applications)."
                 }.getOrElse { "Export failed: ${it.message}" }
+            }
+        }
+    }
+    var calendarOn by remember {
+        mutableStateOf(com.freedu.myinterviews.util.CalendarSync.isEnabled(ctx))
+    }
+    var pendingDriveOp by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val calendarPerms = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants.values.all { it }) {
+            com.freedu.myinterviews.util.CalendarSync.setEnabled(ctx, true)
+            calendarOn = true
+            scope.launch {
+                val n = vm.syncCalendarNow(ctx)
+                status = "Device calendar sync on — $n upcoming round(s) added."
+            }
+        } else {
+            status = "Calendar permission denied — sync stays off."
+        }
+    }
+    val driveConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        pendingDriveOp?.invoke()
+        pendingDriveOp = null
+    }
+    val driveAccountPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            val name = res.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+            if (!name.isNullOrBlank()) vm.update { it.copy(driveAccount = name) }
+        }
+    }
+
+    fun runDriveOp(op: suspend (String) -> String) {
+        val activity = ctx as? Activity ?: run {
+            status = "Needs an Activity context."
+            return
+        }
+        val acct = s.driveAccount
+        if (acct.isBlank()) {
+            status = "Choose a Google account first."
+            return
+        }
+        scope.launch {
+            when (val auth = com.freedu.myinterviews.google.GoogleAuth.getToken(
+                activity, acct, com.freedu.myinterviews.google.GoogleAuth.DRIVE_APPDATA
+            )) {
+                is com.freedu.myinterviews.google.GoogleAuth.AuthResult.Token -> {
+                    status = runCatching { op(auth.token) }.getOrElse {
+                        if (it is com.freedu.myinterviews.google.TokenExpiredException) {
+                            com.freedu.myinterviews.google.GoogleAuth.invalidate(ctx, auth.token)
+                            "Session expired — try again."
+                        } else "Drive failed: ${it.message}"
+                    }
+                }
+                is com.freedu.myinterviews.google.GoogleAuth.AuthResult.Consent -> {
+                    pendingDriveOp = { runDriveOp(op) }
+                    driveConsent.launch(auth.intent)
+                }
+                is com.freedu.myinterviews.google.GoogleAuth.AuthResult.Error ->
+                    status = auth.msg
             }
         }
     }
@@ -264,6 +339,90 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
                     Text("Stored on-device only. Blank = offline coaching questions.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            item { SectionHeader("Device calendar & cloud") }
+            item {
+                SettingsCard {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Sync to device calendar", style = MaterialTheme.typography.bodyMedium)
+                            Text("Adds rounds to a local “Interview Tracker” calendar with alarms.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(calendarOn, { checked ->
+                            if (checked) {
+                                calendarPerms.launch(
+                                    arrayOf(
+                                        android.Manifest.permission.READ_CALENDAR,
+                                        android.Manifest.permission.WRITE_CALENDAR
+                                    )
+                                )
+                            } else {
+                                com.freedu.myinterviews.util.CalendarSync.setEnabled(ctx, false)
+                                com.freedu.myinterviews.util.CalendarSync.deleteAll(ctx)
+                                calendarOn = false
+                                status = "Device calendar sync off — created events removed."
+                            }
+                        })
+                    }
+                    if (calendarOn) {
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                val n = vm.syncCalendarNow(ctx)
+                                status = "Synced $n upcoming round(s) to device calendar."
+                            }
+                        }) { Text("Sync now") }
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Google Drive backup", style = MaterialTheme.typography.bodyMedium)
+                            Text("Private app folder, off by default. Revocable anytime.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(s.driveBackup, { checked ->
+                            vm.update { it.copy(driveBackup = checked) }
+                        })
+                    }
+                    if (s.driveBackup) {
+                        Text(
+                            if (s.driveAccount.isBlank()) "No account chosen"
+                            else "Account: ${s.driveAccount}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                driveAccountPicker.launch(
+                                    com.freedu.myinterviews.google.GoogleAuth.pickAccountIntent()
+                                )
+                            }) { Text(if (s.driveAccount.isBlank()) "Choose account" else "Switch") }
+                            Button(
+                                enabled = s.driveAccount.isNotBlank(),
+                                onClick = {
+                                    runDriveOp { token ->
+                                        val (companies, apps) = vm.snapshot(s.profileId)
+                                        com.freedu.myinterviews.google.DriveBackup.backup(
+                                            token, CsvBackup.export(companies, apps)
+                                        )
+                                    }
+                                }
+                            ) { Text("Back up now") }
+                            OutlinedButton(
+                                enabled = s.driveAccount.isNotBlank(),
+                                onClick = {
+                                    runDriveOp { token ->
+                                        val csv = com.freedu.myinterviews.google.DriveBackup.restore(token)
+                                            ?: return@runDriveOp "No Drive backup found yet."
+                                        vm.restore(CsvBackup.parse(csv))
+                                        "Drive restore complete."
+                                    }
+                                }
+                            ) { Text("Restore") }
+                        }
+                    }
                 }
             }
             item { SectionHeader("Backup & export") }

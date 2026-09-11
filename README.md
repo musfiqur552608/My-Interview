@@ -14,7 +14,7 @@ gamification) runs **on-device**.
 
 ### Core tracking
 - **Company → Application → Interview Round** nested hierarchy with full CRUD.
-- **Kanban pipeline board** (`Applied → Screening → Interviewing → Offer → Rejected → Accepted/Withdrawn`) plus a list view, global search, status filters and 4 sort orders.
+- **Kanban pipeline board** (`Applied → Screening → Interviewing → Offer → Rejected → Accepted/Withdrawn`) with **long-press drag-and-drop** between columns (plus an accessible move dialog), plus a list view, global search, status filters and 4 sort orders.
 - **Company detail** with Overview / Applications tabs, dossier (size, funding, interview difficulty, rating) and per-company accent colors.
 - **Application detail** with Rounds / Prep / Docs / Offer / **Journey timeline** tabs.
 
@@ -23,6 +23,7 @@ gamification) runs **on-device**.
 - **WorkManager reminders**: X-hours-before, day-before, and post-round thank-you nudges.
 - **Daily follow-up detector** (`FollowUpWorker`): flags applications gone quiet past your threshold, in-app + notification.
 - **Interview-day mode**: today's rounds on one screen — times, join links, checklist progress, prep notes.
+- **Device-calendar sync** (opt-in): rounds mirrored into a local “Interview Tracker” system calendar with 1-hour + 1-day alarms; auto-removed when rounds are cancelled or deleted.
 
 ### Preparation hub
 - Per-round prep checklists, notes and resource links.
@@ -51,6 +52,8 @@ gamification) runs **on-device**.
 - Global quick-add bottom sheet from any tab; **Smart Import** (paste a recruiter email → company + application + round auto-created by an offline parser).
 - Home-screen widgets: next interview + countdown, and quick-log (quick-add / day-mode deep links).
 - CSV backup/restore, per-application PDF reports, full-portfolio PDF export.
+- **Google Drive backup** (opt-in): CSV snapshots in the app's private Drive folder, backup/restore from Settings — OAuth via AccountManager, no API keys.
+- **Gmail import** (read-only): list interview mail and decode one tap into Smart Import — same keyless OAuth, revocable anytime.
 - Dark / Light / **Focus (AMOLED-black)** themes + Material You dynamic color.
 - Biometric/device-credential app lock, multi-profile pipelines, onboarding flow.
 - Empty / loading states throughout, edge-to-edge Material 3 UI.
@@ -144,6 +147,10 @@ Android SDK 37.
 
 # unit tests (27 tests: use cases, CSV, match/gamification/comp/overlap/email/AI)
 ./gradlew :app:testDebugUnitTest
+
+# compile on-device UI tests (run on an emulator/device — no Hilt, pure components)
+./gradlew :app:compileDebugAndroidTestKotlin
+# ./gradlew :app:connectedDebugAndroidTest
 ```
 
 Open the project in Android Studio and run the `app` configuration on an
@@ -156,7 +163,9 @@ emulator or device (min SDK 24).
 | `POST_NOTIFICATIONS` | Interview reminders, thank-you nudges, follow-up alerts (asked once on launch, Android 13+) |
 | `RECORD_AUDIO` | Voice memos in reflections (asked when recording) |
 | `USE_BIOMETRIC` | Optional app lock (Settings → Privacy) |
-| `INTERNET` | Only for the optional user-supplied AI-coach API key |
+| `READ/WRITE_CALENDAR` | Optional device-calendar sync (asked when enabling) |
+| `GET_ACCOUNTS` | Finding your on-device Google account for Gmail/Drive import |
+| `INTERNET` | Gmail/Drive REST calls and the optional user-supplied AI-coach key |
 
 ### Settings reference (DataStore)
 
@@ -192,7 +201,16 @@ Widget buttons deep-link via `MainActivity.EXTRA_DEST` (`quick_add`, `today`).
 
 ---
 
+### Google integrations (no SDKs, no keys)
+
+Gmail import and Drive backup share `google/GoogleAuth.kt`: OAuth tokens are
+minted by the on-device Google authenticator via `AccountManager`
+(`oauth2:` scopes `gmail.readonly` / `drive.appdata`), with the system consent
+screen on first use. REST calls use `HttpURLConnection` + `org.json`. Users
+revoke access at myaccount.google.com/permissions. Requires a Google account on
+the device; every network failure surfaces as a status message, never a crash.
+
 ## 🗺 Possible next steps
 
-Drag-and-drop Kanban, device-calendar sync, Gmail OAuth import, cloud backup
-toggle, richer PDF styling, instrumented UI tests.
+Server-driven salary data, interviewer-side scheduling links, Wear OS
+complications, iOS/desktop ports.

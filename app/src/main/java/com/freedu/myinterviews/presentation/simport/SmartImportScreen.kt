@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freedu.myinterviews.data.preferences.SettingsDataStore
@@ -49,8 +51,12 @@ import javax.inject.Inject
 @HiltViewModel
 class SmartImportViewModel @Inject constructor(
     private val repo: TrackerRepository,
-    private val settings: SettingsDataStore
+    private val settings: SettingsDataStore,
+    private val savedState: SavedStateHandle
 ) : ViewModel() {
+    /** Body handed over from the Gmail screen (consumed once). */
+    fun consumePrefill(): String? =
+        savedState.get<String>("import_text")?.also { savedState.remove<String>("import_text") }
     /** Paste → company → application → round, all prefilled. Returns ids for navigation. */
     fun import(draft: EmailDraft, role: String, company: String, onDone: (appId: Long) -> Unit) {
         viewModelScope.launch {
@@ -84,6 +90,7 @@ class SmartImportViewModel @Inject constructor(
 @Composable
 fun SmartImportScreen(
     onOpenApplication: (Long) -> Unit,
+    onOpenGmail: () -> Unit = {},
     vm: SmartImportViewModel = hiltViewModel()
 ) {
     var text by remember { mutableStateOf("") }
@@ -92,6 +99,21 @@ fun SmartImportScreen(
     var company by remember { mutableStateOf("") }
     var done by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun applyParse(t: String) {
+        val d = EmailParser.parse(t)
+        draft = d
+        role = d.role
+        company = d.company
+    }
+
+    // Body handed over from the Gmail screen — parse immediately.
+    LaunchedEffect(Unit) {
+        vm.consumePrefill()?.takeIf { it.isNotBlank() }?.let {
+            text = it
+            applyParse(it)
+        }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Smart import", fontWeight = FontWeight.Bold) }) }
@@ -113,12 +135,7 @@ fun SmartImportScreen(
             Row {
                 Button(
                     enabled = text.isNotBlank(),
-                    onClick = {
-                        val d = EmailParser.parse(text)
-                        draft = d
-                        role = d.role
-                        company = d.company
-                    }
+                    onClick = { applyParse(text) }
                 ) {
                     IconOrFallback()
                     Text(" Detect details")
@@ -130,6 +147,10 @@ fun SmartImportScreen(
                     ) { Text("Clear") }
                 }
             }
+            OutlinedButton(
+                onClick = onOpenGmail,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text("…or import directly from Gmail") }
             val d = draft
             if (d != null) {
                 Spacer(Modifier.height(16.dp))

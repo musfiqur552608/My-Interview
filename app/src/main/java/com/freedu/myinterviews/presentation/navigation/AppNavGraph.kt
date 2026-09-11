@@ -57,6 +57,7 @@ import com.freedu.myinterviews.presentation.pipeline.PipelineScreen
 import com.freedu.myinterviews.presentation.prep.PrepHubScreen
 import com.freedu.myinterviews.presentation.search.SearchScreen
 import com.freedu.myinterviews.presentation.settings.SettingsScreen
+import com.freedu.myinterviews.presentation.simport.GmailScreen
 import com.freedu.myinterviews.presentation.simport.SmartImportScreen
 import com.freedu.myinterviews.presentation.today.TodayScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -252,7 +253,20 @@ private fun MainScaffold(startQuickAdd: Boolean = false, startRoute: String = Ro
                 TodayScreen(onOpenApplication = { nav.navigate(Routes.application(it)) })
             }
             composable(Routes.SMART_IMPORT) {
-                SmartImportScreen(onOpenApplication = { nav.navigate(Routes.application(it)) })
+                SmartImportScreen(
+                    onOpenApplication = { nav.navigate(Routes.application(it)) },
+                    onOpenGmail = { nav.navigate(Routes.GMAIL) }
+                )
+            }
+            composable(Routes.GMAIL) {
+                GmailScreen(
+                    onBack = { nav.popBackStack() },
+                    onBodyReady = { body ->
+                        nav.previousBackStackEntry
+                            ?.savedStateHandle?.set("import_text", body)
+                        nav.popBackStack()
+                    }
+                )
             }
             composable(
                 Routes.COACH,

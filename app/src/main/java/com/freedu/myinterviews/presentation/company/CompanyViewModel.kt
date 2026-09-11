@@ -107,6 +107,11 @@ class CompanyViewModel @Inject constructor(
     fun deleteApplication(id: Long, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             ReminderScheduler.cancelForRound(ctx, id)
+            runCatching {
+                repo.observeRounds(id).first().forEach {
+                    com.freedu.myinterviews.util.CalendarSync.deleteEvent(ctx, it.id)
+                }
+            }
             repo.deleteApplication(id); onDone()
         }
     }
@@ -115,6 +120,12 @@ class CompanyViewModel @Inject constructor(
         viewModelScope.launch {
             val id = repo.upsertRound(round)
             val savedId = if (round.id == 0L) id else round.id
+            // Device-calendar sync (best-effort, toggle-gated).
+            runCatching {
+                com.freedu.myinterviews.util.CalendarSync.upsertEvent(
+                    ctx, round.copy(id = savedId)
+                )
+            }
             val s = runCatching {
                 settings.settings.first()
             }.getOrNull()
@@ -160,6 +171,7 @@ class CompanyViewModel @Inject constructor(
     fun deleteRound(id: Long) {
         viewModelScope.launch {
             ReminderScheduler.cancelForRound(ctx, id)
+            runCatching { com.freedu.myinterviews.util.CalendarSync.deleteEvent(ctx, id) }
             repo.deleteRound(id)
         }
     }

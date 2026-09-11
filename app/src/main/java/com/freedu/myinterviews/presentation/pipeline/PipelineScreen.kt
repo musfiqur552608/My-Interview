@@ -1,19 +1,25 @@
 package com.freedu.myinterviews.presentation.pipeline
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -41,13 +47,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freedu.myinterviews.domain.model.ApplicationStatus
 import com.freedu.myinterviews.domain.model.JobApplication
@@ -155,25 +177,13 @@ fun PipelineScreen(
                     item { Spacer(Modifier.height(88.dp)) }
                 }
             } else {
-                // Kanban: horizontally scrollable status columns; move via dialog (accessible
-                // alternative to drag-and-drop that also works with screen readers).
-                LazyRow(
-                    Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item { Spacer(Modifier.width(4.dp)) }
-                    items(ApplicationStatus.values().toList(), key = { it.name }) { status ->
-                        val col = apps.filter { it.status == status }
-                        KanbanColumn(
-                            status = status,
-                            apps = col,
-                            onOpen = onOpenApplication,
-                            onMove = { vm.move(it, status) },
-                            onMoveTo = { app, to -> vm.move(app, to) }
-                        )
-                    }
-                    item { Spacer(Modifier.width(4.dp)) }
-                }
+                // Kanban with long-press drag-and-drop between columns.
+                // (The ⇆ button + dialog remain as an accessible alternative.)
+                KanbanBoard(
+                    apps = apps,
+                    onOpen = onOpenApplication,
+                    onMove = { app, to -> vm.move(app, to) }
+                )
             }
         }
     }
@@ -224,52 +234,217 @@ private fun ApplicationCard(
     }
 }
 
+/**
+ * Kanban board with long-press drag-and-drop.
+ *
+ * Mechanics: each card reports its window-space origin on drag start; the board
+ * accumulates drag deltas and hit-tests the pointer against live column bounds
+ * (also window-space, so scrolling math cancels out). The source card dims in
+ * place while a floating preview follows the finger; scrolling locks mid-drag.
+ */
+@Composable
+private fun KanbanBoard(
+    apps: List<JobApplication>,
+    onOpen: (Long) -> Unit,
+    onMove: (JobApplication, ApplicationStatus) -> Unit
+) {
+    var dragging by remember { mutableStateOf<JobApplication?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var pressLocal by remember { mutableStateOf(Offset.Zero) }
+    var cardOrigin by remember { mutableStateOf(Offset.Zero) }
+    var target by remember { mutableStateOf<ApplicationStatus?>(null) }
+    val columnBounds = remember { mutableStateMapOf<ApplicationStatus, Rect>() }
+    var boardOrigin by remember { mutableStateOf(Offset.Zero) }
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+
+    fun pointerInWindow(): Offset = Offset(
+        cardOrigin.x + pressLocal.x + dragOffset.x,
+        cardOrigin.y + pressLocal.y + dragOffset.y
+    )
+
+    fun endDrag(commit: Boolean) {
+        val t = target
+        val d = dragging
+        dragging = null
+        dragOffset = Offset.Zero
+        target = null
+        if (commit && t != null && d != null && t != d.status) onMove(d, t)
+    }
+
+    Box(
+        Modifier.fillMaxSize()
+            .onGloballyPositioned { boardOrigin = it.boundsInWindow().topLeft }
+    ) {
+        LazyRow(
+            state = listState,
+            userScrollEnabled = dragging == null,
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(ApplicationStatus.values().toList(), key = { it.name }) { status ->
+                KanbanColumn(
+                    status = status,
+                    apps = apps.filter { it.status == status },
+                    draggingId = dragging?.id,
+                    highlighted = dragging != null && target == status,
+                    onBounds = { columnBounds[status] = it },
+                    onOpen = onOpen,
+                    onMoveTo = { app, to -> onMove(app, to) },
+                    onDragStart = { app, press, origin ->
+                        dragging = app
+                        pressLocal = press
+                        cardOrigin = origin
+                        dragOffset = Offset.Zero
+                        target = app.status
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    onDrag = { amount ->
+                        dragOffset += amount
+                        target = columnBounds.entries
+                            .firstOrNull { (_, r) -> r.contains(pointerInWindow()) }?.key
+                    },
+                    onDragEnd = { endDrag(true) },
+                    onDragCancel = { endDrag(false) }
+                )
+            }
+        }
+        // Floating preview glued under the finger.
+        dragging?.let { app ->
+            val p = pointerInWindow()
+            KanbanCardContent(
+                app = app,
+                dimmed = false,
+                showMoveButton = false,
+                modifier = Modifier
+                    .width(280.dp)
+                    .offset {
+                        IntOffset(
+                            (p.x - boardOrigin.x - pressLocal.x).roundToInt(),
+                            (p.y - boardOrigin.y - pressLocal.y).roundToInt()
+                        )
+                    }
+                    .graphicsLayer {
+                        shadowElevation = with(density) { 16.dp.toPx() }
+                        scaleX = 1.04f
+                        scaleY = 1.04f
+                    }
+                    .zIndex(10f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun KanbanColumn(
     status: ApplicationStatus,
     apps: List<JobApplication>,
+    draggingId: Long?,
+    highlighted: Boolean,
+    onBounds: (Rect) -> Unit,
     onOpen: (Long) -> Unit,
-    onMove: (JobApplication) -> Unit,
-    onMoveTo: (JobApplication, ApplicationStatus) -> Unit
+    onMoveTo: (JobApplication, ApplicationStatus) -> Unit,
+    onDragStart: (JobApplication, Offset, Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit
 ) {
-    Column(Modifier.width(280.dp)) {
+    Column(
+        Modifier.width(280.dp)
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
+            .background(
+                if (highlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else Color.Transparent,
+                RoundedCornerShape(16.dp)
+            )
+            .padding(vertical = 4.dp, horizontal = 4.dp)
+    ) {
         Text(
             "${status.name.lowercase().replaceFirstChar { it.uppercase() }} (${apps.size})",
             style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp),
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
         )
         apps.forEach { app ->
-            var moveOpen by remember { mutableStateOf(false) }
-            Card(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpen(app.id) },
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(app.jobTitle, fontWeight = FontWeight.SemiBold)
-                    Text(app.companyName, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(Modifier.padding(top = 6.dp)) {
-                        StatusChip(app.status)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { moveOpen = true }, modifier = Modifier.padding(0.dp)) {
-                            Icon(Icons.Default.SwapHoriz, contentDescription = "Move",
-                                tint = MaterialTheme.colorScheme.primary)
+            key(app.id) {
+                var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                var moveOpen by remember { mutableStateOf(false) }
+                KanbanCardContent(
+                    app = app,
+                    dimmed = draggingId == app.id,
+                    showMoveButton = true,
+                    onMoveClick = { moveOpen = true },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        .onGloballyPositioned { coords = it }
+                        .clickable { onOpen(app.id) }
+                        .pointerInput(app.id) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { press ->
+                                    onDragStart(
+                                        app, press,
+                                        coords?.boundsInWindow()?.topLeft ?: Offset.Zero
+                                    )
+                                },
+                                onDragEnd = onDragEnd,
+                                onDragCancel = onDragCancel,
+                                onDrag = { change, amount ->
+                                    onDrag(amount)
+                                    change.consume()
+                                }
+                            )
                         }
+                )
+                if (moveOpen) {
+                    MoveDialog(current = app.status, onDismiss = { moveOpen = false }) {
+                        onMoveTo(app, it); moveOpen = false
                     }
-                }
-            }
-            if (moveOpen) {
-                MoveDialog(current = app.status, onDismiss = { moveOpen = false }) {
-                    onMoveTo(app, it); moveOpen = false
                 }
             }
         }
         if (apps.isEmpty()) {
-            Text("Drop here —", style = MaterialTheme.typography.bodySmall,
+            Text(
+                if (highlighted) "Release to drop here" else "Drag cards here",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(8.dp))
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun KanbanCardContent(
+    app: JobApplication,
+    dimmed: Boolean,
+    modifier: Modifier = Modifier,
+    showMoveButton: Boolean = true,
+    onMoveClick: () -> Unit = {}
+) {
+    Card(
+        modifier = modifier.graphicsLayer { alpha = if (dimmed) 0.35f else 1f },
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(app.jobTitle, fontWeight = FontWeight.SemiBold)
+            Text(
+                app.companyName, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(Modifier.padding(top = 6.dp)) {
+                StatusChip(app.status)
+                Spacer(Modifier.weight(1f))
+                if (showMoveButton) {
+                    IconButton(onClick = onMoveClick, modifier = Modifier.padding(0.dp)) {
+                        Icon(
+                            Icons.Default.SwapHoriz, contentDescription = "Move",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
         }
     }
 }

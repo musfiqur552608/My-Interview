@@ -31,7 +31,9 @@ data class AppSettings(
     val onboarded: Boolean = false,
     val nextInterviewSummary: String = "",
     val weeklyGoal: Int = 5,
-    val llmApiKey: String = ""
+    val llmApiKey: String = "",
+    val driveBackup: Boolean = false,
+    val driveAccount: String = ""
 )
 
 @Singleton
@@ -52,6 +54,8 @@ class SettingsDataStore @Inject constructor(
         val NEXT = stringPreferencesKey("next_summary")
         val GOAL = intPreferencesKey("weekly_goal")
         val LLM = stringPreferencesKey("llm_key")
+        val DRIVE = booleanPreferencesKey("drive_backup")
+        val DRV_ACCT = stringPreferencesKey("drive_account")
     }
 
     val settings: Flow<AppSettings> = store.data.map { p ->
@@ -68,7 +72,9 @@ class SettingsDataStore @Inject constructor(
             onboarded = p[K.ONBOARDED] ?: false,
             nextInterviewSummary = p[K.NEXT] ?: "",
             weeklyGoal = p[K.GOAL] ?: 5,
-            llmApiKey = p[K.LLM] ?: ""
+            llmApiKey = p[K.LLM] ?: "",
+            driveBackup = p[K.DRIVE] ?: false,
+            driveAccount = p[K.DRV_ACCT] ?: ""
         )
     }
 
@@ -89,6 +95,8 @@ class SettingsDataStore @Inject constructor(
             e[K.NEXT] = next.nextInterviewSummary
             e[K.GOAL] = next.weeklyGoal
             e[K.LLM] = next.llmApiKey
+            e[K.DRIVE] = next.driveBackup
+            e[K.DRV_ACCT] = next.driveAccount
         }
     }
 
@@ -108,7 +116,9 @@ class SettingsDataStore @Inject constructor(
             onboarded = p[K.ONBOARDED] ?: false,
             nextInterviewSummary = p[K.NEXT] ?: "",
             weeklyGoal = p[K.GOAL] ?: 5,
-            llmApiKey = p[K.LLM] ?: ""
+            llmApiKey = p[K.LLM] ?: "",
+            driveBackup = p[K.DRIVE] ?: false,
+            driveAccount = p[K.DRV_ACCT] ?: ""
         )
     }
 }
