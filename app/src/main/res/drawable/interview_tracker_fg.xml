@@ -1,0 +1,23 @@
+<!-- Centered mark from the app logo, composed for the adaptive-icon safe zone
+     (108dp viewport, artwork inside the central ~72dp circle). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M24,58 h11 v22 h-11 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M41,46 h11 v34 h-11 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M58,34 h11 v46 h-11 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M75,22 h11 v58 h-11 Z" />
+    <path
+        android:fillColor="#FFB020"
+        android:pathData="M77,22 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z" />
+</vector>

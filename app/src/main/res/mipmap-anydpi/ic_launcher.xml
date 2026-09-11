@@ -1,0 +1,25 @@
+<!-- Converted from interview_tracker_icon.svg (bar-chart mark on dark tile). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#16123A"
+        android:pathData="M112,0 L400,0 A112,112 0 0 1 512,112 L512,400 A112,112 0 0 1 400,512 L112,512 A112,112 0 0 1 0,400 L0,112 A112,112 0 0 1 112,0 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M96,290 h44 v90 h-44 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M188,230 h44 v150 h-44 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M280,170 h44 v210 h-44 Z" />
+    <path
+        android:fillColor="#EDEAE3"
+        android:pathData="M372,110 h44 v270 h-44 Z" />
+    <path
+        android:fillColor="#FFB020"
+        android:pathData="M364,64 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0 Z" />
+</vector>
