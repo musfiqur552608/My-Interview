@@ -11,6 +11,7 @@ object Routes {
     const val TODAY = "today"
     const val SMART_IMPORT = "smart_import"
     const val GMAIL = "gmail"
+    const val ANALYTICS = "analytics"
     const val COACH = "coach/{appId}"
     const val COMPANY_DETAIL = "company/{companyId}"
     const val APPLICATION_DETAIL = "application/{appId}"

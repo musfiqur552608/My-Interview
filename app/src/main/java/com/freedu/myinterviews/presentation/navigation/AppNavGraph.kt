@@ -44,6 +44,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.freedu.myinterviews.data.preferences.SettingsDataStore
+import com.freedu.myinterviews.presentation.analytics.AnalyticsScreen
 import com.freedu.myinterviews.presentation.calendar.CalendarScreen
 import com.freedu.myinterviews.presentation.coach.CoachScreen
 import com.freedu.myinterviews.presentation.company.ApplicationDetailScreen
@@ -194,7 +195,8 @@ private fun MainScaffold(startQuickAdd: Boolean = false, startRoute: String = Ro
     val current = backStack?.destination?.route
     val showBar = TABS.any { it.route == current } ||
         current == Routes.PREP || current == Routes.OFFERS ||
-        current == Routes.TODAY || current == Routes.SMART_IMPORT
+        current == Routes.TODAY || current == Routes.SMART_IMPORT ||
+        current == Routes.ANALYTICS
 
     Scaffold(
         bottomBar = {
@@ -233,7 +235,8 @@ private fun MainScaffold(startQuickAdd: Boolean = false, startRoute: String = Ro
                     onOpenPrep = { nav.navigate(Routes.PREP) },
                     onOpenOffers = { nav.navigate(Routes.OFFERS) },
                     onOpenToday = { nav.navigate(Routes.TODAY) },
-                    onOpenImport = { nav.navigate(Routes.SMART_IMPORT) }
+                    onOpenImport = { nav.navigate(Routes.SMART_IMPORT) },
+                    onOpenAnalytics = { nav.navigate(Routes.ANALYTICS) }
                 )
             }
             composable(Routes.PIPELINE) {
@@ -249,6 +252,7 @@ private fun MainScaffold(startQuickAdd: Boolean = false, startRoute: String = Ro
             composable(Routes.SETTINGS) { SettingsScreen() }
             composable(Routes.PREP) { PrepHubScreen() }
             composable(Routes.OFFERS) { OfferCompareScreen() }
+            composable(Routes.ANALYTICS) { AnalyticsScreen() }
             composable(Routes.TODAY) {
                 TodayScreen(onOpenApplication = { nav.navigate(Routes.application(it)) })
             }

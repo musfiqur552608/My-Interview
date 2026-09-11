@@ -45,6 +45,11 @@ gamification) runs **on-device**.
 ### Analytics dashboard
 - Pipeline funnel chart + Applied→Offer conversion (Compose-canvas, no chart dependency).
 - Pass rate by round type, active/upcoming counts, weekly activity.
+- **Interactive Analytics screen**: 30D/90D/6M/All range selector recomputing everything —
+  tap-to-inspect activity bars, funnel stages with conversion rates, 12-week
+  activity heatmap, tap-to-compare offer bars with total-comp breakdowns,
+  per-company response-time leaderboard, and self-rating by round type.
+  All math lives in the pure, unit-tested `AnalyticsEngine`.
 - **Gamification**: XP, levels (Scout → Legend), weekly application streaks and goal progress.
 - **JD match score**: resume-vs-description keyword overlap with missing-skill list.
 

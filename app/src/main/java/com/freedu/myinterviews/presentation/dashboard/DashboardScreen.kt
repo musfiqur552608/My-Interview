@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -64,6 +65,7 @@ fun DashboardScreen(
     onOpenOffers: () -> Unit = {},
     onOpenToday: () -> Unit = {},
     onOpenImport: () -> Unit = {},
+    onOpenAnalytics: () -> Unit = {},
     vm: DashboardViewModel = hiltViewModel()
 ) {
     val data by vm.state.collectAsState()
@@ -139,6 +141,9 @@ fun DashboardScreen(
                     }
                     item {
                         ActionChip(Icons.Default.AutoAwesome, "Smart import", onOpenImport)
+                    }
+                    item {
+                        ActionChip(Icons.Default.Analytics, "Analytics", onOpenAnalytics)
                     }
                 }
             }
